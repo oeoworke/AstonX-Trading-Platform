@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark Theme Background ( Trading App ku) */
+body {
+  background-color: #0f172a; /* Dark Blue/Black */
+  color: white;
+}
