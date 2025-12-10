@@ -6,10 +6,10 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'email', 'username', 'password']
+        # Puthu fields ellam inga irukkanum
+        fields = ['id', 'email', 'username', 'password', 'full_name', 'phone_number', 'country', 'national_id']
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
-        # User create pannum pothu password-ai encrypt seiya (Password-ai maraikka)
         user = User.objects.create_user(**validated_data)
         return user

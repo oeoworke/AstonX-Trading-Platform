@@ -3,6 +3,7 @@ import LandingPage from './LandingPage'
 import Terminal from './Terminal'
 import Login from './Login'
 import Register from './Register'
+import Dashboard from './Dashboard' // <--- Puthu Import
 
 function App() {
   return (
@@ -10,10 +11,11 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/terminal" element={<Terminal />} />
-        
-        {/* Pudhu Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        
+        {/* Puthu Dashboard Route */}
+        <Route path="/dashboard" element={<Dashboard />} /> 
       </Routes>
     </BrowserRouter>
   )

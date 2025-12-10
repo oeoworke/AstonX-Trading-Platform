@@ -133,3 +133,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Yaaru venaalum indha API ah kooppidalam (React local ah run aagum pothu idhu thevai)
 CORS_ALLOW_ALL_ORIGINS = True
+# settings.py கோப்பின் கடைசியில் சேர்க்கவும்
+AUTH_USER_MODEL = 'users.User'
