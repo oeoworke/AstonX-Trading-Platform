@@ -1,186 +1,245 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { useNavigate } from 'react-router-dom' // useNavigate-aiyum serkkanum
+import { useNavigate } from 'react-router-dom'
 
-function Terminal() {
+function App() {
   const navigate = useNavigate()
   const [assets, setAssets] = useState([])
   const [selectedSymbol, setSelectedSymbol] = useState("BTC")
   const [selectedCategory, setSelectedCategory] = useState("CRYPTO")
+  
+  // Trading States
+  const [currentPrice, setCurrentPrice] = useState(0.00)
+  const [lots, setLots] = useState(0.01)
+  const [orders, setOrders] = useState([])
+  const [balance, setBalance] = useState(0)
+  
+  // Calculated States
+  const [equity, setEquity] = useState(0)
+  const [totalPnL, setTotalPnL] = useState(0)
 
-  // API Call (AUTHENTICATION FIX)
+  // 1. Initial Data Load
   useEffect(() => {
-    const fetchAssets = async () => {
+    const fetchData = async () => {
       try {
-        const token = localStorage.getItem('token') // 1. Token-ai edukkurom
-        
-        // Token illana Login-ku po
-        if (!token) {
-            navigate('/login')
-            return
-        }
+        const token = localStorage.getItem('token')
+        if (!token) return navigate('/login')
+        const config = { headers: { Authorization: `Token ${token}` } }
 
-        // 2. Token-udan API call panrom
-        const response = await axios.get('http://127.0.0.1:8000/api/assets/', {
-          headers: {
-            Authorization: `Token ${token}` // <--- INDHA LINE MUKKIYAM
-          }
-        })
-        setAssets(response.data)
+        const assetRes = await axios.get('http://127.0.0.1:8000/api/assets/', config)
+        setAssets(assetRes.data)
+
+        const orderRes = await axios.get('http://127.0.0.1:8000/api/trade/orders/', config)
+        setOrders(orderRes.data)
+
+        const userRes = await axios.get('http://127.0.0.1:8000/api/user/', config)
+        setBalance(parseFloat(userRes.data.wallet.balance))
+
       } catch (error) {
-        console.error("Error fetching assets:", error)
-        // Oruvela Token expire aagi 401 vandhalum Login-ku anuppiduvom
-        if (error.response && error.response.status === 401) {
-            navigate('/login')
-        }
+        console.error("Error loading data:", error)
+      }
+    }
+    fetchData()
+  }, [navigate])
+
+  // 2. Live Price & PnL Calculation Loop (FIXED WITH AUTH)
+  useEffect(() => {
+    const updateMarket = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const config = { headers: { Authorization: `Token ${token}` } }
+
+        // GET Live Price with Auth Token
+        const res = await axios.get(`http://127.0.0.1:8000/api/price/${selectedCategory}/${selectedSymbol}/`, config)
+        const price = parseFloat(res.data.price)
+        setCurrentPrice(price)
+
+        // Calculate Floating P/L for Open Positions
+        let floatingPnL = 0
+        orders.forEach(order => {
+            if (order.status === 'OPEN' && order.asset_symbol === selectedSymbol) {
+                const diff = order.order_type === 'BUY' 
+                    ? (price - parseFloat(order.open_price)) 
+                    : (parseFloat(order.open_price) - price)
+                floatingPnL += diff * parseFloat(order.lots)
+            }
+        })
+
+        setTotalPnL(floatingPnL)
+        setEquity(balance + floatingPnL)
+
+      } catch (error) {
+        console.error("Price update error:", error)
       }
     }
 
-    fetchAssets()
-  }, []) // Empty dependency array -> Runs once on mount
+    updateMarket()
+    const interval = setInterval(updateMarket, 3000) 
+    return () => clearInterval(interval)
+  }, [selectedSymbol, selectedCategory, orders, balance])
 
-  // Load TradingView Script (Pazhayapadiye)
+  // 3. Trade Functions
+  const handleTrade = async (type) => {
+    try {
+        const token = localStorage.getItem('token')
+        await axios.post('http://127.0.0.1:8000/api/trade/place/', {
+            symbol: selectedSymbol,
+            type: type,
+            lots: lots,
+            price: currentPrice
+        }, { headers: { Authorization: `Token ${token}` } })
+
+        const orderRes = await axios.get('http://127.0.0.1:8000/api/trade/orders/', {
+            headers: { Authorization: `Token ${token}` } 
+        })
+        setOrders(orderRes.data)
+    } catch (error) {
+        alert("Trade Failed")
+    }
+  }
+
+  const handleClose = async (orderId) => {
+    try {
+        const token = localStorage.getItem('token')
+        const res = await axios.post('http://127.0.0.1:8000/api/trade/close/', {
+            order_id: orderId,
+            current_price: currentPrice
+        }, { headers: { Authorization: `Token ${token}` } })
+
+        setBalance(parseFloat(res.data.new_balance))
+        const orderRes = await axios.get('http://127.0.0.1:8000/api/trade/orders/', {
+            headers: { Authorization: `Token ${token}` } 
+        })
+        setOrders(orderRes.data)
+
+    } catch (error) {
+        alert("Close Failed")
+    }
+  }
+
+  // Load TradingView Script
   useEffect(() => {
+    const loadTV = () => {
+      if (window.TradingView) {
+        new window.TradingView.widget({
+          "width": "100%", "height": "100%", "symbol": selectedCategory === 'CRYPTO' ? "BINANCE:" + selectedSymbol + "USDT" : "FX:" + selectedSymbol,
+          "interval": "D", "timezone": "Etc/UTC", "theme": "dark",
+          "style": "1", "locale": "en", "toolbar_bg": "#f1f3f6",
+          "enable_publishing": false, "allow_symbol_change": true,
+          "container_id": "tradingview_chart"
+        });
+      }
+    }
+
     if (!document.querySelector('script[src="https://s3.tradingview.com/tv.js"]')) {
       const script = document.createElement('script');
       script.src = 'https://s3.tradingview.com/tv.js';
       script.async = true;
-      script.onload = () => loadChart(selectedSymbol, selectedCategory);
+      script.onload = loadTV;
       document.head.appendChild(script);
     } else {
-        loadChart(selectedSymbol, selectedCategory);
+      loadTV();
     }
-  }, []);
-
-  const loadChart = (symbol, category) => {
-    let tvSymbol = symbol;
-    if (category === 'CRYPTO') {
-      tvSymbol = "BINANCE:" + symbol + "USDT";
-    } else if (category === 'FOREX') {
-      tvSymbol = "FX:" + symbol;
-    }
-
-    if (window.TradingView) {
-      new window.TradingView.widget({
-        "width": "100%",
-        "height": "100%",
-        "symbol": tvSymbol,
-        "interval": "D",
-        "timezone": "Etc/UTC",
-        "theme": "dark",
-        "style": "1",
-        "locale": "en",
-        "toolbar_bg": "#f1f3f6",
-        "enable_publishing": false,
-        "allow_symbol_change": true,
-        "container_id": "tradingview_chart"
-      });
-    }
-  }
-
-  const handleAssetClick = (symbol, category) => {
-    setSelectedSymbol(symbol);
-    setSelectedCategory(category);
-    loadChart(symbol, category);
-  }
+  }, [selectedSymbol, selectedCategory]);
 
   return (
     <div className="h-screen flex flex-col bg-[#0f172a] text-white overflow-hidden">
-      {/* Navbar */}
+      {/* Top Navbar */}
       <nav className="bg-gray-900 px-4 py-2 border-b border-gray-700 flex justify-between items-center h-14 shrink-0">
         <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold text-blue-500">AstonX <span className="text-white">Terminal</span></h1>
-            <div className="bg-gray-800 px-3 py-1 rounded text-sm flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                Standard Account
-            </div>
         </div>
-        <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-white text-sm">Back to Dashboard</button>
+        <div className="flex items-center gap-6 text-sm">
+            <div className="text-right">
+                <p className="text-[10px] text-gray-400">BALANCE</p>
+                <p className="font-bold text-white">${balance.toFixed(2)}</p>
+            </div>
             <div className="text-right">
                 <p className="text-[10px] text-gray-400">EQUITY</p>
-                <p className="text-sm font-bold text-green-400">$10,000.00 USD</p>
+                <p className={`font-bold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    ${equity.toFixed(2)}
+                </p>
             </div>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm font-bold">DEPOSIT</button>
+            <div className="text-right">
+                <p className="text-[10px] text-gray-400">OPEN P/L</p>
+                <p className={`font-bold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(2)}
+                </p>
+            </div>
+            <button onClick={() => navigate('/dashboard')} className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs">Exit</button>
         </div>
       </nav>
 
-      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        
-        {/* Asset List */}
-        <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col shrink-0">
-          <div className="p-3 border-b border-gray-700">
-            <input type="text" placeholder="Search markets..." className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"/>
-          </div>
-          
-          <div className="overflow-y-auto flex-1 p-2 custom-scrollbar">
-            {assets.map((asset) => (
-              <div 
-                key={asset.id}
-                onClick={() => handleAssetClick(asset.symbol, asset.category)}
-                className={`p-2 mb-1 rounded cursor-pointer flex justify-between items-center hover:bg-gray-700 transition ${selectedSymbol === asset.symbol ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''}`}
-              >
-                <div>
-                    <span className="font-bold text-sm block">{asset.symbol}</span>
-                    <span className="text-[10px] text-gray-400">{asset.name}</span>
-                </div>
-                <span className="text-[9px] bg-gray-900 px-1.5 py-0.5 rounded text-gray-400 border border-gray-700">{asset.category}</span>
-              </div>
-            ))}
-          </div>
+        {/* Left: Assets */}
+        <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col shrink-0 overflow-y-auto">
+          {assets.map((asset) => (
+            <div key={asset.id} onClick={() => { setSelectedSymbol(asset.symbol); setSelectedCategory(asset.category); }}
+              className={`p-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-700 transition ${selectedSymbol === asset.symbol ? 'bg-blue-600/20 border-l-4 border-blue-500' : ''}`}>
+              <span className="font-bold text-sm block">{asset.symbol}</span>
+              <span className="text-[10px] text-gray-400">{asset.name}</span>
+            </div>
+          ))}
         </div>
 
-        {/* Chart */}
+        {/* Center: Chart & History */}
         <div className="flex-1 relative bg-[#131722] flex flex-col">
-            <div id="tradingview_chart" className="w-full h-full"></div>
-        </div>
-
-        {/* Order Panel */}
-        <div className="w-72 bg-gray-800 border-l border-gray-700 flex flex-col shrink-0">
-            <div className="p-4 border-b border-gray-700">
-                <h3 className="font-bold text-lg flex items-center justify-between">
-                    {selectedSymbol} <span className="text-xs font-normal text-gray-400 bg-gray-900 px-2 py-1 rounded">Market Open</span>
-                </h3>
-            </div>
-
-            <div className="p-4 flex-1">
-                <div className="mb-6">
-                    <label className="text-xs text-gray-400 block mb-1">Volume (Lots)</label>
-                    <div className="flex items-center">
-                        <button className="bg-gray-700 p-2 rounded-l hover:bg-gray-600">-</button>
-                        <input type="number" defaultValue="0.01" className="w-full bg-gray-900 text-center py-2 border-y border-gray-600 text-white focus:outline-none" />
-                        <button className="bg-gray-700 p-2 rounded-r hover:bg-gray-600">+</button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-6 text-xs">
-                    <div>
-                        <p className="text-gray-500">Margin</p>
-                        <p className="font-bold">23.45 USD</p>
-                    </div>
-                    <div>
-                        <p className="text-gray-500">Leverage</p>
-                        <p className="font-bold">1:100</p>
-                    </div>
-                </div>
-
-                <div className="flex gap-3 mt-4">
-                    <button className="flex-1 bg-red-500/10 border border-red-500/50 hover:bg-red-500 hover:text-white text-red-500 py-3 rounded transition flex flex-col items-center">
-                        <span className="text-xs font-bold">SELL</span>
-                        <span className="text-lg font-bold">1.0845</span>
-                    </button>
-                    <button className="flex-1 bg-green-500/10 border border-green-500/50 hover:bg-green-500 hover:text-white text-green-500 py-3 rounded transition flex flex-col items-center">
-                        <span className="text-xs font-bold">BUY</span>
-                        <span className="text-lg font-bold">1.0848</span>
-                    </button>
-                </div>
+            <div className="flex-1 relative"><div id="tradingview_chart" className="w-full h-full"></div></div>
+            <div className="h-48 bg-gray-900 border-t border-gray-700 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                    <thead className="text-gray-500 bg-gray-800 sticky top-0 uppercase">
+                        <tr>
+                            <th className="px-4 py-2">Symbol</th>
+                            <th className="px-4 py-2">Type</th>
+                            <th className="px-4 py-2">Open Price</th>
+                            <th className="px-4 py-2">P/L</th>
+                            <th className="px-4 py-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {orders.map((order) => {
+                            let displayPnL = parseFloat(order.profit_loss);
+                            if (order.status === 'OPEN' && order.asset_symbol === selectedSymbol) {
+                                const diff = order.order_type === 'BUY' ? (currentPrice - parseFloat(order.open_price)) : (parseFloat(order.open_price) - currentPrice)
+                                displayPnL = diff * parseFloat(order.lots)
+                            }
+                            return (
+                                <tr key={order.id} className="border-b border-gray-800">
+                                    <td className="px-4 py-2 font-bold">{order.asset_symbol}</td>
+                                    <td className={`px-4 py-2 font-bold ${order.order_type === 'BUY' ? 'text-green-500' : 'text-red-500'}`}>{order.order_type}</td>
+                                    <td className="px-4 py-2">{parseFloat(order.open_price).toFixed(5)}</td>
+                                    <td className={`px-4 py-2 font-bold ${displayPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>{displayPnL.toFixed(2)}</td>
+                                    <td className="px-4 py-2">
+                                        {order.status === 'OPEN' && (
+                                            <button onClick={() => handleClose(order.id)} className="bg-red-500/20 text-red-400 px-2 py-1 rounded">CLOSE</button>
+                                        )}
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
             </div>
         </div>
 
+        {/* Right: Trade Panel */}
+        <div className="w-72 bg-gray-800 border-l border-gray-700 p-4">
+            <h3 className="font-bold text-lg mb-4">{selectedSymbol} <span className="text-green-400 text-xs ml-2">Live</span></h3>
+            <p className="text-3xl font-bold mb-6">${currentPrice.toFixed(2)}</p>
+            <div className="space-y-4">
+                <div>
+                    <label className="text-xs text-gray-400">Lots</label>
+                    <input type="number" value={lots} onChange={(e) => setLots(e.target.value)} className="w-full bg-gray-900 p-2 rounded border border-gray-700 outline-none mt-1" />
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => handleTrade('SELL')} className="flex-1 bg-red-600 p-3 rounded font-bold hover:bg-red-700 transition">SELL</button>
+                    <button onClick={() => handleTrade('BUY')} className="flex-1 bg-green-600 p-3 rounded font-bold hover:bg-green-700 transition">BUY</button>
+                </div>
+            </div>
+        </div>
       </div>
     </div>
   )
 }
 
-export default Terminal
+export default App
