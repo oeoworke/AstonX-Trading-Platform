@@ -5,25 +5,26 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from decimal import Decimal
 
-# Custom User Model (Fixing the Clash Error)
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=255, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     country = models.CharField(max_length=100, blank=True, null=True)
     national_id = models.CharField(max_length=50, blank=True, null=True)
+    
+    # --- PUTHU FIELD: Profile Picture ---
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
 
-    # --- INDHA RENDU LINES DHAAN MUKKIYAM (Error Fix) ---
     groups = models.ManyToManyField(
         'auth.Group',
-        related_name='custom_user_set', # Ithu Mothal-ai thadukkum
+        related_name='custom_user_set',
         blank=True,
         help_text='The groups this user belongs to.',
         verbose_name='groups',
     )
     user_permissions = models.ManyToManyField(
         'auth.Permission',
-        related_name='custom_user_set', # Ithu Mothal-ai thadukkum
+        related_name='custom_user_set',
         blank=True,
         help_text='Specific permissions for this user.',
         verbose_name='user permissions',
@@ -35,7 +36,7 @@ class User(AbstractUser):
     def __str__(self):
         return self.email
 
-# Wallet Model (Pazhayapadiye - No Change)
+# Wallet Model (Appadiye irukkattum...)
 class Wallet(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wallet")
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("10000.00"))
@@ -44,7 +45,7 @@ class Wallet(models.Model):
     def __str__(self):
         return f"{self.user.email}'s Wallet"
 
-# Signals (Pazhayapadiye - No Change)
+# Signals (Appadiye irukkattum...)
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_wallet(sender, instance, created, **kwargs):
     if created:

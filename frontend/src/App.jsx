@@ -3,19 +3,37 @@ import LandingPage from './LandingPage'
 import Terminal from './Terminal'
 import Login from './Login'
 import Register from './Register'
-import Dashboard from './Dashboard' // <--- Puthu Import
+import Dashboard from './Dashboard'
+import ProtectedRoute from './ProtectedRoute' // <--- Namma Guard
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public Routes (Yaar venalum paakkalam) */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/terminal" element={<Terminal />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         
-        {/* Puthu Dashboard Route */}
-        <Route path="/dashboard" element={<Dashboard />} /> 
+        {/* Private Routes (Login pannavanga mattum) */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="/terminal" 
+          element={
+            <ProtectedRoute>
+              <Terminal />
+            </ProtectedRoute>
+          } 
+        />
+
       </Routes>
     </BrowserRouter>
   )

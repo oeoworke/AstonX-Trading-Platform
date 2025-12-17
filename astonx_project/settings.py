@@ -131,7 +131,26 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# REST Framework Settings (Idhu thaan Token-ai Check pannum)
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',  # <--- IDHU MUKKIYAM
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
 # Yaaru venaalum indha API ah kooppidalam (React local ah run aagum pothu idhu thevai)
 CORS_ALLOW_ALL_ORIGINS = True
-# settings.py கோப்பின் கடைசியில் சேர்க்கவும்
+
 AUTH_USER_MODEL = 'users.User'
+
+# STATIC FILES
+STATIC_URL = 'static/'
+
+# --- MEDIA SETTINGS (Images kaga puthusa serkavum) ---
+import os
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

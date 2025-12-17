@@ -7,7 +7,7 @@ function LandingPage() {
       <nav className="fixed w-full z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
             <div className="flex items-center gap-12">
-                <h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX</h1>
+                <h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX.</h1>
                 <div className="hidden md:flex gap-8 text-sm font-medium text-gray-300">
                     <a href="#" className="hover:text-white transition">Trading</a>
                     <a href="#" className="hover:text-white transition">Markets</a>
@@ -15,10 +15,21 @@ function LandingPage() {
                     <a href="#" className="hover:text-white transition">Tools</a>
                 </div>
             </div>
+            
+            {/* --- INGA DHAAN MAATRAM SEITHULLOM (Login & Register Links) --- */}
             <div className="flex gap-4">
-                <button className="text-gray-300 hover:text-white font-medium px-4 py-2">Sign in</button>
-                <button className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-2 rounded-full font-bold transition">Open Account</button>
+                {/* Sign In Button -> Login Page */}
+                <Link to="/login" className="text-gray-300 hover:text-white font-medium px-4 py-2 flex items-center">
+                    Sign in
+                </Link>
+                
+                {/* Open Account Button -> Register Page */}
+                <Link to="/register" className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-2 rounded-full font-bold transition flex items-center">
+                    Open Account
+                </Link>
             </div>
+            {/* ----------------------------------------------------------- */}
+
         </div>
       </nav>
 
@@ -26,7 +37,7 @@ function LandingPage() {
       <div className="pt-32 pb-20 px-6 max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-12">
         <div className="flex-1 space-y-8">
             <div className="inline-block bg-gray-800 rounded-full px-4 py-1 text-xs text-yellow-500 font-bold tracking-wide mb-2">
-                NEW GENERATION PLATFORM WITH AI
+                NEW GENERATION PLATFORM
             </div>
             <h2 className="text-5xl md:text-7xl font-extrabold leading-tight">
                 Trade with <br/>
@@ -37,6 +48,7 @@ function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                {/* Launch Terminal Button */}
                 <Link 
                   to="/terminal" 
                   target="_blank"
