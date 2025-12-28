@@ -1,14 +1,23 @@
 from django.contrib import admin
-from .models import Asset
+from .models import Asset, Order, MarketData
 
-# Admin panel la namma Asset table ah register panrom
+# 1. Asset Admin 
 @admin.register(Asset)
 class AssetAdmin(admin.ModelAdmin):
-    # Admin list la enna columns theriyanum
-    list_display = ('name', 'symbol', 'category')
-    
-    # Edhula filter panna mudiyum (Right side la varum)
+    list_display = ('id', 'name', 'symbol', 'category')
     list_filter = ('category',)
-    
-    # Search box venuma?
     search_fields = ('name', 'symbol')
+
+# 2. Order Admin 
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'asset', 'order_type', 'status', 'profit_loss', 'created_at')
+    list_filter = ('status', 'order_type')
+    search_fields = ('user__username', 'asset__symbol')
+
+# 3. Market Data Admin
+@admin.register(MarketData)
+class MarketDataAdmin(admin.ModelAdmin):
+    list_display = ('asset', 'timestamp', 'open_price', 'close_price', 'volume')
+    list_filter = ('asset__symbol',)
+    search_fields = ('asset__symbol',)

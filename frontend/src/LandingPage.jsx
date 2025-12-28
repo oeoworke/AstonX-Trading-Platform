@@ -7,7 +7,7 @@ function LandingPage() {
       <nav className="fixed w-full z-50 bg-black/80 backdrop-blur-md border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
             <div className="flex items-center gap-12">
-                <h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX.</h1>
+                <h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX</h1>
                 <div className="hidden md:flex gap-8 text-sm font-medium text-gray-300">
                     <a href="#" className="hover:text-white transition">Trading</a>
                     <a href="#" className="hover:text-white transition">Markets</a>
