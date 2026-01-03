@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from .models import Asset, Order, MarketData
+from .models import Asset, Order, MarketData, UserAutoPilot # Added UserAutoPilot
 from .serializers import AssetSerializer, OrderSerializer
 from users.models import Wallet, BalanceHistory
 from decimal import Decimal
@@ -35,12 +35,28 @@ def get_yahoo_ticker(asset):
     
     return symbol
 
-# 1. Get All Assets (Market list kaga)
+# 1. Get All Assets (Updated with Personalized Auto-Pilot Status)
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_assets(request):
+    """
+    Intha function ippo intha specific user-oda bot status-aiyum sethu anuppum.
+    """
     assets = Asset.objects.all()
-    serializer = AssetSerializer(assets, many=True)
-    return Response(serializer.data)
+    data = []
+    for asset in assets:
+        # Database-la intha user-oda personal switch status-ai check panrom
+        bot_setting = UserAutoPilot.objects.filter(user=request.user, asset=asset).first()
+        is_active = bot_setting.is_active if bot_setting else False
+        
+        data.append({
+            "id": asset.id,
+            "name": asset.name,
+            "symbol": asset.symbol,
+            "category": asset.category,
+            "is_auto_pilot": is_active # Frontend-kku ithu personal status
+        })
+    return Response(data)
 
 # 2. Get Live Price (Yahoo Finance moolam)
 @api_view(['GET'])
@@ -230,13 +246,13 @@ def bulk_sync_historical_data(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# --- 10. AI PREDICTION VIEW (Puthusa serthathu) ---
+# 10. AI Prediction View
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_ai_prediction(request):
     symbol = request.query_params.get('symbol', 'BTC')
     
-    # Check if we have enough data (Minimum 20 days thevai)
+    # Check if we have enough data
     data_count = MarketData.objects.filter(asset__symbol=symbol).count()
     if data_count < 20:
         return Response({
@@ -245,8 +261,6 @@ def get_ai_prediction(request):
         }, status=400)
 
     try:
-        # AI-ai initialize panni train panrom
-        # Note: Dashboard-la fast-ah response vara 'epochs=5' vachurukom
         ai = AstonX_AI(symbol)
         ai.train_model(epochs=5)
         
@@ -265,3 +279,29 @@ def get_ai_prediction(request):
             "status": "error",
             "message": str(e)
         }, status=500)
+
+# --- 11. TOGGLE AUTO-PILOT (PERSONALIZED UPDATE) ---
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_auto_pilot(request):
+    symbol = request.data.get('symbol')
+    try:
+        asset = Asset.objects.get(symbol=symbol)
+        # Intha user-kku intha asset-la settings record irukka nu paarkkurom
+        # Illai na pudhusa create pannikkum
+        bot_setting, created = UserAutoPilot.objects.get_or_create(
+            user=request.user, 
+            asset=asset
+        )
+        
+        # Boolean value-ai toggle panrom
+        bot_setting.is_active = not bot_setting.is_active
+        bot_setting.save()
+        
+        return Response({
+            "status": "success",
+            "is_auto_pilot": bot_setting.is_active,
+            "message": f"Auto-Pilot {'Activated' if bot_setting.is_active else 'Deactivated'} for {symbol} (Personalized)"
+        })
+    except Asset.DoesNotExist:
+        return Response({"error": "Asset not found"}, status=404)

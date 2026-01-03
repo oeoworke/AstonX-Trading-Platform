@@ -31,8 +31,11 @@ urlpatterns = [
     path('api/ai/sync-data/', main_views.sync_historical_data, name='sync_data'),
     path('api/ai/bulk-sync/', main_views.bulk_sync_historical_data, name='bulk_sync'),
     
-    # --- NEW: AI PREDICTION ENDPOINT ---
+    # --- AI PREDICTION & BOT CONTROLS ---
     path('api/ai-predict/', main_views.get_ai_prediction, name='ai-predict'),
+    
+    # --- TOGGLE AUTO-PILOT (Intha path miss aanathala thaan error vanthathu) ---
+    path('api/ai/toggle-auto-pilot/', main_views.toggle_auto_pilot, name='toggle_auto_pilot'),
 ]
 
 # Media files serving logic (Profile pictures kaaga)
