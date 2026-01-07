@@ -20,8 +20,8 @@ class Asset(models.Model):
     def __str__(self):
         return f"{self.name} ({self.category})"
 
-# --- 2. NEW MODEL: Personalized Bot Switch ---
-# Intha table thaan user-aiyum asset-aiyum link panni, personalized permission-ai kavanikkum.
+# --- 2. UPDATED MODEL: Personalized Bot Switch with Risk Management ---
+# Intha table thaan user-aiyum asset-aiyum link panni, personalized settings-ai kavanikkum.
 class UserAutoPilot(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
@@ -30,6 +30,13 @@ class UserAutoPilot(models.Model):
     )
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=False)
+    
+    # --- PUTHU FIELDS: Custom Risk Management ---
+    # Intha fields thaan user-oda settings-ai database-la save pannum.
+    lot_size = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.01"))
+    stop_loss_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("1.00"))
+    take_profit_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("2.00"))
+    
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -37,7 +44,7 @@ class UserAutoPilot(models.Model):
         unique_together = ('user', 'asset')
 
     def __str__(self):
-        return f"{self.user.email} - {self.asset.symbol}: {'ON' if self.is_active else 'OFF'}"
+        return f"{self.user.username} - {self.asset.symbol}: {'ON' if self.is_active else 'OFF'}"
 
 # 3. Order Model (User trades logic)
 class Order(models.Model):

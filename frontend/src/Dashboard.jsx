@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { 
-  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity 
+  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity, Settings 
 } from 'lucide-react'
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -17,7 +17,15 @@ function Dashboard() {
   const [isPredicting, setIsPredicting] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState('BTC')
   const [availableAssets, setAvailableAssets] = useState([])
-  const [isAutoPilot, setIsAutoPilot] = useState(false) // Auto-Pilot Toggle State
+  const [isAutoPilot, setIsAutoPilot] = useState(false)
+
+  // --- RISK SETTINGS STATES ---
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [botSettings, setBotSettings] = useState({
+    lot_size: 0.01,
+    stop_loss_pct: 1.0,
+    take_profit_pct: 2.0
+  })
 
   // View State (Accounts view or History view)
   const [view, setView] = useState('overview') 
@@ -35,7 +43,7 @@ function Dashboard() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const fileInputRef = useRef(null)
 
-  // --- FETCH DATA (Unified Function) ---
+  // --- FETCH DATA ---
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('token')
@@ -45,25 +53,19 @@ function Dashboard() {
       }
       const config = { headers: { Authorization: `Token ${token}` } }
 
-      // 1. Fetch User Profile
       const userRes = await axios.get('http://127.0.0.1:8000/api/user/', config)
       setUserData(userRes.data)
 
-      // 2. Fetch Chart Data
       const chartRes = await axios.get('http://127.0.0.1:8000/api/trade/chart/', config)
       setChartData(chartRes.data)
 
-      // 3. Fetch History
       const historyRes = await axios.get('http://127.0.0.1:8000/api/trade/orders/?status=CLOSED', config)
       setClosedOrders(historyRes.data)
 
-      // 4. Fetch All Available Assets First
       const assetsRes = await axios.get('http://127.0.0.1:8000/api/assets/', config)
       const freshAssets = assetsRes.data
       setAvailableAssets(freshAssets)
       
-      // 5. Initial AI Prediction fetch with "Direct Data Injection"
-      // Pass 'freshAssets' directly to avoid the state update lag (Race Condition Fix)
       fetchAiPrediction('BTC', freshAssets)
 
       setLoading(false)
@@ -73,25 +75,28 @@ function Dashboard() {
     }
   }
 
-  // --- FETCH AI PREDICTION (Modified to accept assets directly) ---
+  // --- FETCH AI PREDICTION ---
   const fetchAiPrediction = async (symbol, currentAssets = null) => {
     setIsPredicting(true)
     try {
       const token = localStorage.getItem('token')
       const config = { headers: { Authorization: `Token ${token}` } }
       
-      // 1. Backend API request
       const res = await axios.get(`http://127.0.0.1:8000/api/ai-predict/?symbol=${symbol}`, config)
       setAiPrediction(res.data)
       setSelectedSymbol(symbol)
       
-      // 2. Race Condition Fix: Asset list-la irundhu auto-pilot status-ai check panrom
-      // State update aaga time aagum enbadhaal, 'currentAssets' parameter-ai direct-ah check panrom
       const listToCheck = currentAssets || availableAssets
       const currentAsset = listToCheck.find(a => a.symbol === symbol)
       
       if (currentAsset) {
           setIsAutoPilot(currentAsset.is_auto_pilot)
+          // Risk settings-ai state-la sync panrom
+          setBotSettings({
+            lot_size: currentAsset.lot_size,
+            stop_loss_pct: currentAsset.stop_loss_pct,
+            take_profit_pct: currentAsset.take_profit_pct
+          })
       }
       
     } catch (error) {
@@ -109,14 +114,42 @@ function Dashboard() {
       const res = await axios.post('http://127.0.0.1:8000/api/ai/toggle-auto-pilot/', { symbol: selectedSymbol }, config)
       
       setIsAutoPilot(res.data.is_auto_pilot)
-      
-      // Local list update to prevent reset on dropdown change
       setAvailableAssets(prev => prev.map(a => 
         a.symbol === selectedSymbol ? { ...a, is_auto_pilot: res.data.is_auto_pilot } : a
       ))
       
     } catch (error) {
       alert("Failed to toggle Auto-Pilot")
+    }
+  }
+
+  // --- SAVE RISK SETTINGS ---
+  const handleSaveSettings = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('token')
+      const config = { headers: { Authorization: `Token ${token}` } }
+      const res = await axios.post('http://127.0.0.1:8000/api/ai/update-settings/', {
+        symbol: selectedSymbol,
+        lot_size: botSettings.lot_size,
+        stop_loss_pct: botSettings.stop_loss_pct,
+        take_profit_pct: botSettings.take_profit_pct
+      }, config)
+      
+      // Local list update so it stays synced
+      setAvailableAssets(prev => prev.map(a => 
+        a.symbol === selectedSymbol ? { 
+          ...a, 
+          lot_size: res.data.lot_size,
+          stop_loss_pct: res.data.stop_loss_pct,
+          take_profit_pct: res.data.take_profit_pct
+        } : a
+      ))
+      
+      setIsSettingsOpen(false)
+      alert("Bot Risk Settings Updated Successfully!")
+    } catch (error) {
+      alert("Failed to update settings")
     }
   }
 
@@ -144,7 +177,7 @@ function Dashboard() {
     setIsSyncing(false)
   }
 
-  // PROFILE PIC & DEPOSIT LOGIC
+  // Profile Pic & Deposit (Unchanged)
   const handleFileChange = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -307,15 +340,24 @@ function Dashboard() {
                                     <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500"><ChevronDown size={18} /></div>
                                 </div>
                             </div>
+
+                            {/* --- AUTO-PILOT TOGGLE & GEAR ICON --- */}
                             <div className="bg-gray-800/40 p-4 rounded-2xl border border-gray-700/50 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-2 rounded-lg ${isAutoPilot ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-700 text-gray-500'}`}><Activity size={18} /></div>
                                     <p className="text-white text-xs font-bold">Auto-Pilot Mode</p>
                                 </div>
-                                <button onClick={handleToggleAutoPilot} className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${isAutoPilot ? 'bg-blue-600' : 'bg-gray-700'}`}>
-                                    <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-md ${isAutoPilot ? 'translate-x-6' : 'translate-x-0'}`} />
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {/* SETTINGS GEAR ICON */}
+                                    <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-gray-400 hover:text-white transition-colors bg-gray-700/50 rounded-lg">
+                                        <Settings size={18} />
+                                    </button>
+                                    <button onClick={handleToggleAutoPilot} className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${isAutoPilot ? 'bg-blue-600' : 'bg-gray-700'}`}>
+                                        <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-md ${isAutoPilot ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
                             </div>
+
                             <div className="p-4 bg-gray-800/50 rounded-2xl border border-gray-700 mt-2">
                                 <p className="text-gray-500 text-[10px] uppercase font-bold mb-2">Signal Status</p>
                                 {isPredicting ? (
@@ -365,9 +407,80 @@ function Dashboard() {
         )}
       </div>
 
-      {/* POPUPS */}
+      {/* --- BOT RISK SETTINGS MODAL --- */}
+      {isSettingsOpen && (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110] p-4">
+            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in zoom-in duration-200">
+                <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700">
+                    <div className="flex items-center gap-2 text-yellow-500">
+                        <Settings size={20} />
+                        <h3 className="text-lg font-bold text-white tracking-tight">Bot Risk Settings: {selectedSymbol}</h3>
+                    </div>
+                    <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button>
+                </div>
+                
+                <form onSubmit={handleSaveSettings} className="p-8 space-y-6">
+                    <div className="space-y-4">
+                        {/* LOT SIZE */}
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Standard Lot Size</label>
+                            <input 
+                              type="number" step="0.01" 
+                              className="w-full bg-gray-900 border border-gray-700 rounded-xl py-4 px-4 text-white font-bold outline-none focus:border-yellow-500 transition" 
+                              value={botSettings.lot_size} 
+                              onChange={(e) => setBotSettings({...botSettings, lot_size: e.target.value})} 
+                              required 
+                            />
+                        </div>
+
+                        {/* STOP LOSS PERCENT */}
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Automatic Stop Loss (%)</label>
+                            <div className="relative">
+                                <input 
+                                  type="number" step="0.1" 
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-xl py-4 px-4 text-white font-bold outline-none focus:border-yellow-500 transition" 
+                                  value={botSettings.stop_loss_pct} 
+                                  onChange={(e) => setBotSettings({...botSettings, stop_loss_pct: e.target.value})} 
+                                  required 
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">%</span>
+                            </div>
+                        </div>
+
+                        {/* TAKE PROFIT PERCENT */}
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Automatic Take Profit (%)</label>
+                            <div className="relative">
+                                <input 
+                                  type="number" step="0.1" 
+                                  className="w-full bg-gray-900 border border-gray-700 rounded-xl py-4 px-4 text-white font-bold outline-none focus:border-yellow-500 transition" 
+                                  value={botSettings.take_profit_pct} 
+                                  onChange={(e) => setBotSettings({...botSettings, take_profit_pct: e.target.value})} 
+                                  required 
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl">
+                        <p className="text-blue-400 text-[10px] leading-relaxed">
+                            <span className="font-bold">Pro Tip:</span> Higher lot sizes increase profit potential but also raise risk levels significantly. Adjust based on your current balance.
+                        </p>
+                    </div>
+
+                    <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-4 rounded-2xl uppercase tracking-widest text-sm transition-all transform active:scale-95 shadow-lg shadow-yellow-500/20">
+                        Save Risk Configuration
+                    </button>
+                </form>
+            </div>
+        </div>
+      )}
+
+      {/* OTHER POPUPS (Unchanged) */}
       {isDeleteConfirmOpen && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[120] p-4">
             <div className="bg-gray-800 w-full max-w-sm rounded-3xl border border-gray-700 p-8 text-center">
                 <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32} /></div>
                 <h3 className="text-xl font-bold text-white mb-2">Remove Photo?</h3>
@@ -380,7 +493,7 @@ function Dashboard() {
       )}
 
       {isDepositOpen && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[120] p-4">
             <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden">
                 <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700"><h3 className="text-lg font-bold text-white tracking-tight italic">Fund Account</h3><button onClick={() => setIsDepositOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button></div>
                 <form onSubmit={handleDeposit} className="p-8 space-y-8">

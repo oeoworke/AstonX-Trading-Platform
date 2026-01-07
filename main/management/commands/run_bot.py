@@ -1,25 +1,22 @@
 import time
 from django.core.management.base import BaseCommand
-from main.models import Asset, Order, UserAutoPilot # UserAutoPilot model sirkappattullathu
+from main.models import Asset, Order, UserAutoPilot
 from main.ai_model import AstonX_AI
-from django.contrib.auth import get_user_model # Corrected Import
+from django.contrib.auth import get_user_model
 from decimal import Decimal
 import yfinance as yf
 
-# Dynamically get the custom user model (users.User)
+# Dynamically get the custom user model
 User = get_user_model()
 
 class Command(BaseCommand):
-    help = 'Runs the AstonX Personalized Automatic Trading Bot'
+    help = 'Runs the AstonX Personalized Risk-Aware Automatic Trading Bot'
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('AstonX Bot Engine Started (Personalized Mode)...'))
+        self.stdout.write(self.style.SUCCESS('AstonX Bot Engine Started (Custom Risk Management Enabled)...'))
         
-        # Oru continuous loop-ai start panrom (Car engine start aagidichi!)
         while True:
             try:
-                # --- NEW LOGIC START ---
-                # Ippo namma 'Asset' table-la filter pannaama, 'UserAutoPilot' table-ai paarkurom
                 # Yaar ellaam active-ah switch on pannirukaanga nu list edukkurom
                 active_subscriptions = UserAutoPilot.objects.filter(is_active=True)
                 
@@ -30,30 +27,24 @@ class Command(BaseCommand):
                     distinct_assets = Asset.objects.filter(id__in=active_subscriptions.values_list('asset_id', flat=True).distinct())
                     
                     for asset in distinct_assets:
-                        # Intha asset-ukku yaar ellam active-ah irukaangalo avangalai mattum filter panrom
                         subscribed_users_for_asset = active_subscriptions.filter(asset=asset)
                         self.process_asset(asset, subscribed_users_for_asset)
-                # --- NEW LOGIC END ---
                 
-                # 2. Wait for 60 seconds (Oru nimisham interval)
+                # Scan interval
                 time.sleep(60)
                 
             except KeyboardInterrupt:
                 self.stdout.write(self.style.WARNING('Bot Stopped Manually.'))
                 break
             except Exception as e:
-                # Logging error clearly to help debugging
                 self.stdout.write(self.style.ERROR(f'Bot Global Error: {str(e)}'))
                 time.sleep(10)
 
     def process_asset(self, asset, active_users_settings):
-        # Ippo scanning message-la user count-aiyum kaattum
         self.stdout.write(f'Scanning: {asset.symbol} for {active_users_settings.count()} active users')
         
         try:
-            # AI prediction ketaakum
             ai = AstonX_AI(asset.symbol)
-            # Bot-kkaaga fast-ah train panrom
             ai.train_model(epochs=3) 
             prediction = ai.predict_next_move()
             
@@ -62,7 +53,6 @@ class Command(BaseCommand):
             if prediction == 'HOLD' or "trained model found" in str(prediction):
                 return
 
-            # Current Price edukkuroam
             yf_symbol = f"{asset.symbol}-USD" if asset.category == 'CRYPTO' else f"{asset.symbol}=X"
             ticker = yf.Ticker(yf_symbol)
             history = ticker.history(period="1d")
@@ -72,42 +62,52 @@ class Command(BaseCommand):
             
             current_price = Decimal(str(history['Close'].iloc[-1]))
             
-            # loop through ONLY the users who have enabled auto-pilot for THIS specific asset
+            # Loop through only the users who enabled auto-pilot for this asset
             for setting in active_users_settings:
-                user = setting.user
-                self.execute_trade(user, asset, prediction, current_price)
+                # Ippo execute_trade-ku 'setting' object-aiye anuppuroam
+                self.execute_trade(setting, asset, prediction, current_price)
         
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Error processing {asset.symbol}: {str(e)}'))
 
-    def execute_trade(self, user, asset, prediction, current_price):
+    def execute_trade(self, setting, asset, prediction, current_price):
+        """
+        Execute trade based on individual user's risk settings.
+        """
+        user = setting.user
         try:
-            # 1. Wallet check
             if not hasattr(user, 'wallet'):
                 return
                 
             wallet = user.wallet
-            lots = Decimal("0.01") # Bot default lot size
+            
+            # --- CUSTOM RISK LOGIC START ---
+            # Backend-la fixed values-ai thavirthu, user set panna values-ai edukkuroam
+            lots = setting.lot_size
+            sl_pct = setting.stop_loss_pct / Decimal("100") # Ex: 1% -> 0.01
+            tp_pct = setting.take_profit_pct / Decimal("100") # Ex: 2% -> 0.02
+            
             required_margin = current_price * lots
             
             if wallet.balance < required_margin:
-                self.stdout.write(self.style.WARNING(f'Insufficient funds for {user.username} on {asset.symbol}'))
+                self.stdout.write(self.style.WARNING(f'Insufficient funds for {user.username} on {asset.symbol} (Requires ${required_margin})'))
                 return
 
-            # 2. Already oru trade open-la irukkaa nu check panrom (Safety)
+            # Safety check: Already order open-la irukka?
             existing_order = Order.objects.filter(user=user, asset=asset, status='OPEN').exists()
             if existing_order:
                 return
 
-            # 3. Stop Loss (1%) & Take Profit (2%) calculate panrom
+            # SL & TP Calculation based on user's custom percentages
             if prediction == 'BUY':
-                sl = current_price * Decimal("0.99")
-                tp = current_price * Decimal("1.02")
+                sl = current_price * (Decimal("1") - sl_pct)
+                tp = current_price * (Decimal("1") + tp_pct)
             else: # SELL
-                sl = current_price * Decimal("1.01")
-                tp = current_price * Decimal("0.98")
+                sl = current_price * (Decimal("1") + sl_pct)
+                tp = current_price * (Decimal("1") - tp_pct)
+            # --- CUSTOM RISK LOGIC END ---
 
-            # 4. Order-ai database-la place panrom
+            # Place Order with User's Settings
             Order.objects.create(
                 user=user, 
                 asset=asset, 
@@ -119,7 +119,10 @@ class Command(BaseCommand):
                 status='OPEN'
             )
             
-            self.stdout.write(self.style.SUCCESS(f'Bot Success: {prediction} placed for {user.username} on {asset.symbol} at ${current_price}'))
+            self.stdout.write(self.style.SUCCESS(
+                f'Bot Success: {prediction} placed for {user.username} on {asset.symbol} | '
+                f'Lots: {lots}, SL: {setting.stop_loss_pct}%, TP: {setting.take_profit_pct}%'
+            ))
             
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Trade execution failed for {user.username}: {str(e)}'))

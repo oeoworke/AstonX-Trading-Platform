@@ -34,8 +34,12 @@ urlpatterns = [
     # --- AI PREDICTION & BOT CONTROLS ---
     path('api/ai-predict/', main_views.get_ai_prediction, name='ai-predict'),
     
-    # --- TOGGLE AUTO-PILOT (Intha path miss aanathala thaan error vanthathu) ---
+    # --- BOT CONTROLS (TOGGLE & SETTINGS) ---
     path('api/ai/toggle-auto-pilot/', main_views.toggle_auto_pilot, name='toggle_auto_pilot'),
+    
+    # --- NEW: UPDATE BOT RISK SETTINGS ---
+    # User dashboard-la Gear icon click panni set panra settings inga thaan varum.
+    path('api/ai/update-settings/', main_views.update_bot_settings, name='update_settings'),
 ]
 
 # Media files serving logic (Profile pictures kaaga)

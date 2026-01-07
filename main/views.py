@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from .models import Asset, Order, MarketData, UserAutoPilot # Added UserAutoPilot
+from .models import Asset, Order, MarketData, UserAutoPilot
 from .serializers import AssetSerializer, OrderSerializer
 from users.models import Wallet, BalanceHistory
 from decimal import Decimal
@@ -35,30 +35,38 @@ def get_yahoo_ticker(asset):
     
     return symbol
 
-# 1. Get All Assets (Updated with Personalized Auto-Pilot Status)
+# 1. Get All Assets (Updated to include personalized settings)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_assets(request):
     """
-    Intha function ippo intha specific user-oda bot status-aiyum sethu anuppum.
+    Intha function ippo intha user-oda bot status matrum risk settings-aiyum sethu anuppum.
     """
     assets = Asset.objects.all()
     data = []
     for asset in assets:
-        # Database-la intha user-oda personal switch status-ai check panrom
+        # User-oda personalized settings-ai check panrom
         bot_setting = UserAutoPilot.objects.filter(user=request.user, asset=asset).first()
+        
+        # Default values set panrom (Record illai na)
         is_active = bot_setting.is_active if bot_setting else False
+        lot_size = bot_setting.lot_size if bot_setting else Decimal("0.01")
+        sl_pct = bot_setting.stop_loss_pct if bot_setting else Decimal("1.00")
+        tp_pct = bot_setting.take_profit_pct if bot_setting else Decimal("2.00")
         
         data.append({
             "id": asset.id,
             "name": asset.name,
             "symbol": asset.symbol,
             "category": asset.category,
-            "is_auto_pilot": is_active # Frontend-kku ithu personal status
+            "is_auto_pilot": is_active,
+            "lot_size": float(lot_size),
+            "stop_loss_pct": float(sl_pct),
+            "take_profit_pct": float(tp_pct)
         })
     return Response(data)
 
-# 2. Get Live Price (Yahoo Finance moolam)
+# 2. Get Live Price
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_live_price(request, symbol, category):
@@ -77,7 +85,7 @@ def get_live_price(request, symbol, category):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 3. Place New Order (SL/TP logic-oda)
+# 3. Place New Order
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def place_order(request):
@@ -108,7 +116,7 @@ def place_order(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 4. Get My Orders (With Status Filter)
+# 4. Get My Orders
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_orders(request):
@@ -120,7 +128,7 @@ def get_my_orders(request):
     serializer = OrderSerializer(orders, many=True)
     return Response(serializer.data)
 
-# 5. Close Order (Wallet update & Graph snapshot)
+# 5. Close Order
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def close_order(request):
@@ -149,7 +157,7 @@ def close_order(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 6. Update SL/TP (Pencil icon click panni edit panna)
+# 6. Update SL/TP
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_order(request):
@@ -165,7 +173,7 @@ def update_order(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 7. Get Balance History Data for Chart
+# 7. Get Balance History
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_balance_chart_data(request):
@@ -176,7 +184,7 @@ def get_balance_chart_data(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 8. Single Symbol Sync Function
+# 8. Data Sync Functions
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def sync_historical_data(request):
@@ -185,10 +193,8 @@ def sync_historical_data(request):
     try:
         asset = Asset.objects.get(symbol=symbol)
         yf_symbol = get_yahoo_ticker(asset)
-        
         ticker = yf.Ticker(yf_symbol)
         df = ticker.history(period=period)
-        
         count = 0
         for index, row in df.iterrows():
             MarketData.objects.update_or_create(
@@ -204,7 +210,6 @@ def sync_historical_data(request):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
-# 9. Bulk Sync with Freshness Check
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bulk_sync_historical_data(request):
@@ -213,10 +218,7 @@ def bulk_sync_historical_data(request):
         if latest_entry:
             time_diff = timezone.now() - latest_entry.timestamp
             if time_diff < timedelta(hours=24):
-                return Response({
-                    "message": "Market data is already up to date! (Last synced within 24h)",
-                    "status": "already_synced"
-                })
+                return Response({"message": "Market data is up to date!", "status": "already_synced"})
 
         assets = Asset.objects.all()
         total_points = 0
@@ -224,9 +226,7 @@ def bulk_sync_historical_data(request):
             yf_symbol = get_yahoo_ticker(asset) 
             ticker = yf.Ticker(yf_symbol)
             df = ticker.history(period="1y")
-            
             if df.empty: continue
-            
             for index, row in df.iterrows():
                 MarketData.objects.update_or_create(
                     asset=asset, timestamp=index,
@@ -237,12 +237,7 @@ def bulk_sync_historical_data(request):
                     }
                 )
                 total_points += 1
-        
-        return Response({
-            "message": "Bulk Sync Completed Successfully!", 
-            "status": "success",
-            "total_points": total_points
-        })
+        return Response({"message": "Bulk Sync Completed!", "status": "success", "total_points": total_points})
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
@@ -251,57 +246,66 @@ def bulk_sync_historical_data(request):
 @permission_classes([IsAuthenticated])
 def get_ai_prediction(request):
     symbol = request.query_params.get('symbol', 'BTC')
-    
-    # Check if we have enough data
     data_count = MarketData.objects.filter(asset__symbol=symbol).count()
     if data_count < 20:
-        return Response({
-            "status": "error",
-            "message": f"Insufficient data for {symbol}. Please sync market data first."
-        }, status=400)
-
+        return Response({"status": "error", "message": f"Insufficient data for {symbol}."}, status=400)
     try:
         ai = AstonX_AI(symbol)
         ai.train_model(epochs=5)
-        
-        # Predict panrom
         prediction = ai.predict_next_move()
-        
         return Response({
-            "status": "success",
-            "symbol": symbol,
-            "prediction": prediction,
+            "status": "success", "symbol": symbol, "prediction": prediction,
             "confidence": "High" if prediction != "HOLD" else "Low",
             "timestamp": timezone.now()
         })
     except Exception as e:
-        return Response({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
+        return Response({"status": "error", "message": str(e)}, status=500)
 
-# --- 11. TOGGLE AUTO-PILOT (PERSONALIZED UPDATE) ---
+# 11. Toggle Auto-Pilot
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def toggle_auto_pilot(request):
     symbol = request.data.get('symbol')
     try:
         asset = Asset.objects.get(symbol=symbol)
-        # Intha user-kku intha asset-la settings record irukka nu paarkkurom
-        # Illai na pudhusa create pannikkum
-        bot_setting, created = UserAutoPilot.objects.get_or_create(
-            user=request.user, 
-            asset=asset
-        )
-        
-        # Boolean value-ai toggle panrom
+        bot_setting, created = UserAutoPilot.objects.get_or_create(user=request.user, asset=asset)
         bot_setting.is_active = not bot_setting.is_active
+        bot_setting.save()
+        return Response({
+            "status": "success",
+            "is_auto_pilot": bot_setting.is_active,
+            "message": f"Auto-Pilot {'Activated' if bot_setting.is_active else 'Deactivated'}"
+        })
+    except Asset.DoesNotExist:
+        return Response({"error": "Asset not found"}, status=404)
+
+# --- 12. NEW: UPDATE BOT RISK SETTINGS ---
+# Intha endpoint thaan Dashboard-la irundhu vara risk settings-ai save pannum.
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_bot_settings(request):
+    data = request.data
+    symbol = data.get('symbol')
+    try:
+        asset = Asset.objects.get(symbol=symbol)
+        bot_setting, created = UserAutoPilot.objects.get_or_create(user=request.user, asset=asset)
+        
+        # Values-ai update panroam
+        if 'lot_size' in data:
+            bot_setting.lot_size = Decimal(str(data.get('lot_size')))
+        if 'stop_loss_pct' in data:
+            bot_setting.stop_loss_pct = Decimal(str(data.get('stop_loss_pct')))
+        if 'take_profit_pct' in data:
+            bot_setting.take_profit_pct = Decimal(str(data.get('take_profit_pct')))
+            
         bot_setting.save()
         
         return Response({
             "status": "success",
-            "is_auto_pilot": bot_setting.is_active,
-            "message": f"Auto-Pilot {'Activated' if bot_setting.is_active else 'Deactivated'} for {symbol} (Personalized)"
+            "message": f"Bot settings updated for {symbol}",
+            "lot_size": float(bot_setting.lot_size),
+            "stop_loss_pct": float(bot_setting.stop_loss_pct),
+            "take_profit_pct": float(bot_setting.take_profit_pct)
         })
-    except Asset.DoesNotExist:
-        return Response({"error": "Asset not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
