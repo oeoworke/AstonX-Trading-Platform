@@ -66,14 +66,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'astonx_project.wsgi.application'
 
 # --- ASGI CONFIGURATION FOR WEBSOCKETS ---
-# Normal HTTP-ai thavira WebSocket traffic-ai handle panna ithu thevai
 ASGI_APPLICATION = 'astonx_project.asgi.application'
 
-# --- CHANNEL LAYERS (Bridge for Bot and Frontend) ---
-# Bot message anuppum pothu intha layer vazhiyaaga thaan Frontend-kku pogum
+# --- CHANNEL LAYERS (Updated for Redis) ---
+# In-Memory-ai thookittu Redis use pannaal thaan live updates Terminal-ai thaandi varum.
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)], # Default Redis port
+        },
     },
 }
 

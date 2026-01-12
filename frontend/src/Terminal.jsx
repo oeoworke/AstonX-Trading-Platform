@@ -154,7 +154,7 @@ function Terminal() {
   return (
     <div className="h-screen flex flex-col bg-[#0f172a] text-white overflow-hidden relative">
       <nav className="bg-gray-900 px-4 py-2 border-b border-gray-700 flex justify-between items-center h-14 shrink-0">
-        <h1 className="text-lg font-bold text-blue-500">AstonX <span className="text-white">Terminal</span></h1>
+        <h1 className="text-lg font-bold text-yellow-500">AstonX <span className="text-white">Terminal</span></h1>
         <div className="flex items-center gap-6 text-sm">
             <div className="text-right"><p className="text-[10px] text-gray-400 uppercase">Balance</p><p className="font-bold">${balance.toFixed(2)}</p></div>
             <div className="text-right"><p className="text-[10px] text-gray-400 uppercase">Equity</p><p className={`font-bold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>${equity.toFixed(2)}</p></div>

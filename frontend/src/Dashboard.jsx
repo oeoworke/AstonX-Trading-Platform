@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { 
-  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity, Settings, BellRing
+  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity, Settings, BellRing, Newspaper // Newspaper icon added
 } from 'lucide-react'
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -79,29 +79,42 @@ function Dashboard() {
     }
   }
 
-  // --- WEBSOCKET REAL-TIME CONNECTION ---
+  // --- WEBSOCKET REAL-TIME CONNECTION (WITH LOGS) ---
   useEffect(() => {
-    if (!userData?.id) return; // User ID therinja thaan filter panna mudiyum
+    if (!userData?.id) return;
 
+    console.log("🚀 Attempting WebSocket connection to: ws://127.0.0.1:8000/ws/trade/");
     const socket = new WebSocket('ws://127.0.0.1:8000/ws/trade/');
+
+    socket.onopen = () => {
+        console.log("✅ WebSocket Connected Successfully! (Live updates bridge established)");
+    };
 
     socket.onmessage = (e) => {
         const data = JSON.parse(e.data);
+        console.log("📩 New Message from Bot Server:", data);
         
         // Signal vandhavudane check panroam: Ithu namma user-kku thaan trade vizhundhirukkaa?
         if (data.event === "TRADE_EXECUTED" && data.user_id === userData.id) {
+            console.log("🔥 Match found! Displaying notification for user:", userData.username);
             // 1. Notification show panroam
             setLiveNotification(data.text);
             
             // 2. Data-vai silent-ah update panroam (Balance refresh)
             fetchData(true);
 
-            // 3. Notification-ai 5 second kazhichu thookiduroam
-            setTimeout(() => setLiveNotification(null), 5000);
+            // 3. Notification-ai 8 second kazhichu thookiduroam
+            setTimeout(() => setLiveNotification(null), 8000);
         }
     };
 
-    socket.onerror = (err) => console.error("WebSocket Error:", err);
+    socket.onclose = () => {
+        console.log("❌ WebSocket Connection Closed.");
+    };
+
+    socket.onerror = (err) => {
+        console.error("⚠️ WebSocket Error Observed:", err);
+    };
     
     return () => socket.close();
   }, [userData?.id]);
@@ -203,7 +216,7 @@ function Dashboard() {
     } catch (error) { alert("Deposit Failed.") }
   }
 
-  if (loading) return <div className="text-white bg-[#0f172a] h-screen flex items-center justify-center tracking-widest font-bold">LOADING...</div>
+  if (loading) return <div className="text-white bg-[#0f172a] h-screen flex items-center justify-center tracking-widest font-bold">LOADING DASHBOARD...</div>
 
   const balance = parseFloat(userData?.wallet?.balance || 0)
   const leverage = userData?.wallet?.leverage || 100
@@ -241,12 +254,21 @@ function Dashboard() {
             <button onClick={handleBulkSync} disabled={isSyncing} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-400 hover:bg-blue-900/20 rounded-lg transition-all ${isSyncing ? 'animate-pulse cursor-not-allowed opacity-50' : ''}`}>{isSyncing ? <RefreshCw size={18} className="animate-spin" /> : <Database size={18} />} {isSyncing ? 'Syncing...' : 'Sync AI Data'}</button>
             <button onClick={() => fetchAiPrediction(selectedSymbol)} disabled={isPredicting} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-yellow-500 hover:bg-yellow-900/10 rounded-lg transition-all">{isPredicting ? <RefreshCw size={18} className="animate-spin" /> : <Brain size={18} />} Refresh Prediction</button>
             <div className="pt-4 space-y-1">
-                <button onClick={() => setIsDepositOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><Wallet size={18} /> Deposit / Withdraw</button>
+                <button onClick={() => setIsDepositOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><Wallet size={18} /> Deposit </button>
                 <button onClick={() => navigate('/terminal')} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><TrendingUp size={18} /> Trading Terminal</button>
+                
+                {/* --- ECONOMIC NEWS ICON (Added under Trading Terminal) --- */}
+                <button 
+                  onClick={() => window.open('/calendar', '_blank')} 
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-yellow-500 hover:bg-yellow-600/10 rounded-lg transition-all group border border-transparent hover:border-yellow-500/20"
+                >
+                  <Newspaper size={18} className="group-hover:scale-110 transition" /> 
+                  Economic News
+                </button>
             </div>
           </nav>
         </div>
-        <div className="p-4 border-t border-gray-800"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 rounded-lg hover:bg-gray-800 hover:text-red-300 transition-all"><LogOut size={18} /> Log Out</button></div>
+        <div className="p-4 border-t border-gray-800"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 rounded-lg hover:bg-red-800 hover:text-red-100 transition-all"><LogOut size={18} /> Log Out</button></div>
       </div>
 
       {/* MAIN CONTENT */}
@@ -276,15 +298,17 @@ function Dashboard() {
         {view === 'overview' ? (
           <div className="max-w-5xl mx-auto space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-gray-800 rounded-3xl p-8 border border-gray-700 shadow-2xl relative overflow-hidden">
+                <div className="lg:col-span-2 bg-gray-800 rounded-3xl p-8 border border-gray-700 shadow-2xl relative overflow-hidden flex flex-col">
                     <div className="flex justify-between items-start mb-4 relative z-10">
-                      <div><div className="flex items-center gap-3 mb-3"><span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-1 rounded border border-green-500/30 tracking-tighter">LIVE ACCOUNT</span></div><h1 className="text-6xl font-black text-white tracking-tighter">${balance.toLocaleString()}<span className="text-2xl text-gray-500 font-normal">.00</span></h1></div>
+                      <div><div className="flex items-center gap-3 mb-3"><span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-1 rounded border border-green-500/30 tracking-tighter">DEMO ACCOUNT</span></div><h1 className="text-6xl font-black text-white tracking-tighter">${balance.toLocaleString()}<span className="text-2xl text-gray-500 font-normal">.00</span></h1></div>
                       <div className="flex flex-col gap-3">
                         <button onClick={() => navigate('/terminal')} className="bg-yellow-500 hover:bg-yellow-400 text-black px-10 py-3 rounded-xl font-bold text-lg transition transform active:scale-95">Trade</button>
                         <button onClick={() => setIsDepositOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white px-10 py-3 rounded-xl font-bold transition border border-gray-600 active:scale-95">Deposit</button>
                       </div>
                     </div>
-                    <div className="h-48 w-full mt-6 relative z-10">
+                    
+                    {/* FIXED: Added min-height container to prevent width(-1) error */}
+                    <div className="flex-1 w-full min-h-[250px] mt-6 relative z-10">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={chartData}>
                           <defs><linearGradient id="colorBal" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopOpacity={0}/></linearGradient></defs>
@@ -293,6 +317,7 @@ function Dashboard() {
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
+
                     <div className="grid grid-cols-4 gap-4 bg-gray-900/60 p-6 rounded-2xl border border-gray-700 mt-6 relative z-10">
                         <div className="border-r border-gray-700 pr-4"><p className="text-gray-400 text-[10px] uppercase font-bold mb-1 tracking-widest">Equity</p><p className="text-lg font-bold text-white">${equity.toLocaleString()}</p></div>
                         <div className="border-r border-gray-700 pr-4"><p className="text-gray-400 text-[10px] uppercase font-bold mb-1 tracking-widest">Used Margin</p><p className="text-lg font-bold text-white">$0.00</p></div>
@@ -380,7 +405,7 @@ function Dashboard() {
       {/* --- SETTINGS MODAL --- */}
       {isSettingsOpen && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
-            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-gray-800 w-full max-md:max-w-xs max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in zoom-in duration-200">
                 <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700"><div className="flex items-center gap-2 text-yellow-500"><Settings size={20} /><h3 className="text-lg font-bold text-white tracking-tight">Bot Risk Settings</h3></div><button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button></div>
                 <form onSubmit={handleSaveSettings} className="p-8 space-y-6">
                     <div className="space-y-4">
@@ -397,7 +422,7 @@ function Dashboard() {
       {/* --- DEPOSIT MODAL --- */}
       {isDepositOpen && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
-            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden">
+            <div className="bg-gray-800 w-full max-md:max-w-xs max-w-md rounded-3xl border border-gray-700 overflow-hidden">
                 <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700"><h3 className="text-lg font-bold text-white tracking-tight italic">Fund Account</h3><button onClick={() => setIsDepositOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button></div>
                 <form onSubmit={handleDeposit} className="p-8 space-y-8">
                     <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-3 tracking-[0.2em]">Amount (USD)</label>

@@ -4,13 +4,14 @@ import Terminal from './Terminal'
 import Login from './Login'
 import Register from './Register'
 import Dashboard from './Dashboard'
-import ProtectedRoute from './ProtectedRoute' // <--- Namma Guard
+import Calendar from './Calendar'
+import ProtectedRoute from './ProtectedRoute'
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes (Yaar venalum paakkalam) */}
+        {/* Public Routes */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -23,13 +24,23 @@ function App() {
               <Dashboard />
             </ProtectedRoute>
           } 
-        />
+        /> {/* <--- Corrected closing tag */}
         
         <Route 
           path="/terminal" 
           element={
             <ProtectedRoute>
               <Terminal />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Economic Calendar Route */}
+        <Route 
+          path="/calendar" 
+          element={
+            <ProtectedRoute>
+              <Calendar />
             </ProtectedRoute>
           } 
         />
