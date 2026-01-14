@@ -26,6 +26,12 @@ urlpatterns = [
     path('api/user/', user_views.get_user_profile, name='user_profile'),
     path('api/deposit/', user_views.deposit_funds, name='deposit'),
     path('api/user/picture/', user_views.update_profile_picture, name='update_picture'),
+
+    # --- PUTHU ENDPOINTS: WITHDRAWAL SYSTEM ---
+    # User withdrawal request anuppa:
+    path('api/withdraw/request/', user_views.request_withdrawal, name='withdraw_request'),
+    # User thannudaiya withdrawal history paarkka:
+    path('api/withdraw/history/', user_views.get_my_withdrawals, name='withdraw_history'),
     
     # --- AI & DATA SYNC ---
     path('api/ai/sync-data/', main_views.sync_historical_data, name='sync_data'),
@@ -38,7 +44,6 @@ urlpatterns = [
     path('api/ai/toggle-auto-pilot/', main_views.toggle_auto_pilot, name='toggle_auto_pilot'),
     
     # --- NEW: UPDATE BOT RISK SETTINGS ---
-    # User dashboard-la Gear icon click panni set panra settings inga thaan varum.
     path('api/ai/update-settings/', main_views.update_bot_settings, name='update_settings'),
 ]
 

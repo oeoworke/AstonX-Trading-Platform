@@ -76,7 +76,7 @@ function LandingPage() {
                 >
                   Launch Web Terminal
                 </Link>
-                <button className="border border-gray-700 hover:border-gray-500 px-8 py-4 rounded-full text-lg font-bold transition">
+                <button className="border border-gray-700 hover:bg-yellow-500 hover:text-black px-8 py-4 rounded-full text-lg font-bold transition">
                     View Markets
                 </button>
             </div>

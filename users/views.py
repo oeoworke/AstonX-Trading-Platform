@@ -10,7 +10,7 @@ from .serializers import UserProfileSerializer
 # User model-ai edukkuroam
 User = get_user_model()
 
-# --- 1. REGISTER API (Fixed Import Error) ---
+# --- 1. REGISTER API ---
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
@@ -44,12 +44,8 @@ def register_user(request):
             full_name=full_name
         )
         
-        # --- FIX: Wallet import correct-ah pannanum ---
-        # Wallet users app-la dhaan irukku, so '.models' use pannanum
+        # --- Wallet creation logic ---
         from .models import Wallet 
-        
-        # Note: Models.py-la ulla Signal automatic-ah wallet create pannum. 
-        # But safety-kku ingayum check panroam.
         wallet, created = Wallet.objects.get_or_create(user=user)
         
         # Initial balance set panroam
@@ -133,3 +129,74 @@ def update_profile_picture(request):
             return Response({"message": "Profile picture deleted!"})
         else:
             return Response({"error": "No picture to delete"}, status=400)
+
+
+# --- 5. PUTHU API: REQUEST WITHDRAWAL (Option A) ---
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def request_withdrawal(request):
+    """
+    User oru withdrawal request-ai intha API vazhiyaaga anuppuvaanga.
+    Balance check panni, request-ai 'PENDING' status-la save pannuvom.
+    """
+    user = request.user
+    data = request.data
+    
+    try:
+        amount = Decimal(str(data.get('amount', 0)))
+        method = data.get('method') # 'BANK' or 'CRYPTO'
+        address_details = data.get('address_details')
+
+        # 1. Basic validation
+        if amount <= 0:
+            return Response({"error": "Sariyaana amount-ai enter pannunga."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not method or not address_details:
+            return Response({"error": "Payment method matrum details (Bank info/Crypto address) thevai."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Balance Check (Virtual Money check)
+        if user.wallet.balance < amount:
+            return Response({"error": "Unga wallet-la pothumaana balance illai."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Create Request (Status: PENDING by default in model)
+        from .models import Withdrawal
+        withdrawal = Withdrawal.objects.create(
+            user=user,
+            amount=amount,
+            method=method,
+            address_details=address_details,
+            status='PENDING'
+        )
+
+        return Response({
+            "message": "Withdrawal request success! Waiting for Admin Approval.",
+            "withdrawal_id": withdrawal.id,
+            "current_status": withdrawal.status
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# --- 6. PUTHU API: GET MY WITHDRAWAL HISTORY ---
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_my_withdrawals(request):
+    """
+    User dashboard-la avanga panna withdrawal requests history-ai paarkka.
+    """
+    from .models import Withdrawal
+    withdrawals = Withdrawal.objects.filter(user=request.user).order_by('-created_at')
+    
+    history_data = []
+    for w in withdrawals:
+        history_data.append({
+            "id": w.id,
+            "amount": float(w.amount),
+            "method": w.method,
+            "status": w.status,
+            "address": w.address_details,
+            "date": w.created_at.strftime("%Y-%m-%d %H:%M")
+        })
+    
+    return Response(history_data)

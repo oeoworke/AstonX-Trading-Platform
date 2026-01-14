@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { 
-  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity, Settings, BellRing, Newspaper // Newspaper icon added
+  LayoutDashboard, TrendingUp, Wallet, History, LogOut, X, Trash2, Upload, Database, RefreshCw, Cpu, Brain, Zap, ChevronDown, Shield, Activity, Settings, BellRing, Newspaper, CreditCard, ArrowDownCircle
 } from 'lucide-react'
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -30,23 +30,30 @@ function Dashboard() {
   // --- LIVE NOTIFICATION STATE ---
   const [liveNotification, setLiveNotification] = useState(null)
 
-  // View State (Accounts view or History view)
+  // View State (Accounts, History, or Withdrawals)
   const [view, setView] = useState('overview') 
   
   // Data States
   const [chartData, setChartData] = useState([])
   const [closedOrders, setClosedOrders] = useState([])
+  const [withdrawalHistory, setWithdrawalHistory] = useState([]) // New state
 
   // Popup States
   const [isDepositOpen, setIsDepositOpen] = useState(false)
   const [depositAmount, setDepositAmount] = useState('')
   
+  // --- NEW: WITHDRAWAL STATES ---
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
+  const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [withdrawMethod, setWithdrawMethod] = useState('CRYPTO')
+  const [withdrawDetails, setWithdrawDetails] = useState('')
+
   // Profile Picture States
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const fileInputRef = useRef(null)
 
-  // --- FETCH DATA (Modified for silent updates) ---
+  // --- FETCH DATA (Modified to include withdrawal history) ---
   const fetchData = async (silent = false) => {
     try {
       const token = localStorage.getItem('token')
@@ -65,6 +72,10 @@ function Dashboard() {
       const historyRes = await axios.get('http://127.0.0.1:8000/api/trade/orders/?status=CLOSED', config)
       setClosedOrders(historyRes.data)
 
+      // Withdrawal History fetch
+      const withdrawRes = await axios.get('http://127.0.0.1:8000/api/withdraw/history/', config)
+      setWithdrawalHistory(withdrawRes.data)
+
       if (!silent) {
         const assetsRes = await axios.get('http://127.0.0.1:8000/api/assets/', config)
         const freshAssets = assetsRes.data
@@ -79,41 +90,20 @@ function Dashboard() {
     }
   }
 
-  // --- WEBSOCKET REAL-TIME CONNECTION (WITH LOGS) ---
+  // --- WEBSOCKET REAL-TIME CONNECTION ---
   useEffect(() => {
     if (!userData?.id) return;
 
-    console.log("🚀 Attempting WebSocket connection to: ws://127.0.0.1:8000/ws/trade/");
+    console.log("🚀 Attempting WebSocket connection...");
     const socket = new WebSocket('ws://127.0.0.1:8000/ws/trade/');
-
-    socket.onopen = () => {
-        console.log("✅ WebSocket Connected Successfully! (Live updates bridge established)");
-    };
 
     socket.onmessage = (e) => {
         const data = JSON.parse(e.data);
-        console.log("📩 New Message from Bot Server:", data);
-        
-        // Signal vandhavudane check panroam: Ithu namma user-kku thaan trade vizhundhirukkaa?
         if (data.event === "TRADE_EXECUTED" && data.user_id === userData.id) {
-            console.log("🔥 Match found! Displaying notification for user:", userData.username);
-            // 1. Notification show panroam
             setLiveNotification(data.text);
-            
-            // 2. Data-vai silent-ah update panroam (Balance refresh)
             fetchData(true);
-
-            // 3. Notification-ai 8 second kazhichu thookiduroam
             setTimeout(() => setLiveNotification(null), 8000);
         }
-    };
-
-    socket.onclose = () => {
-        console.log("❌ WebSocket Connection Closed.");
-    };
-
-    socket.onerror = (err) => {
-        console.error("⚠️ WebSocket Error Observed:", err);
     };
     
     return () => socket.close();
@@ -188,7 +178,7 @@ function Dashboard() {
     setIsSyncing(false)
   }
 
-  // Profile logic (Simplified for readability)
+  // Profile logic
   const handleFileChange = async (e) => {
     const file = e.target.files[0]; if (!file) return;
     const formData = new FormData(); formData.append('profile_picture', file);
@@ -216,6 +206,27 @@ function Dashboard() {
     } catch (error) { alert("Deposit Failed.") }
   }
 
+  // --- NEW: HANDLE WITHDRAWAL ---
+  const handleWithdraw = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('token')
+      const res = await axios.post('http://127.0.0.1:8000/api/withdraw/request/', { 
+        amount: withdrawAmount,
+        method: withdrawMethod,
+        address_details: withdrawDetails
+      }, { headers: { Authorization: `Token ${token}` } })
+      
+      alert(res.data.message)
+      setIsWithdrawOpen(false)
+      setWithdrawAmount('')
+      setWithdrawDetails('')
+      fetchData() // Refresh balance and history
+    } catch (error) { 
+      alert(error.response?.data?.error || "Withdrawal Failed.") 
+    }
+  }
+
   if (loading) return <div className="text-white bg-[#0f172a] h-screen flex items-center justify-center tracking-widest font-bold">LOADING DASHBOARD...</div>
 
   const balance = parseFloat(userData?.wallet?.balance || 0)
@@ -226,56 +237,55 @@ function Dashboard() {
   return (
     <div className="flex h-screen bg-[#0f172a] text-white font-sans overflow-hidden relative">
       
-      {/* --- LIVE NOTIFICATION POPUP (TOP CENTER) --- */}
+      {/* LIVE NOTIFICATION POPUP */}
       {liveNotification && (
         <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top-10 duration-500">
             <div className="bg-blue-600 border border-blue-400 px-6 py-4 rounded-2xl shadow-[0_0_40px_rgba(37,99,235,0.4)] flex items-center gap-4 min-w-[320px]">
-                <div className="bg-white/20 p-2 rounded-full animate-bounce">
-                    <BellRing size={24} className="text-white" />
-                </div>
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">System Notification</p>
-                    <p className="text-sm font-bold text-white leading-tight">{liveNotification}</p>
-                </div>
+                <div className="bg-white/20 p-2 rounded-full animate-bounce"><BellRing size={24} className="text-white" /></div>
+                <div><p className="text-[10px] font-black uppercase tracking-widest text-blue-200">System Notification</p><p className="text-sm font-bold text-white leading-tight">{liveNotification}</p></div>
                 <button onClick={() => setLiveNotification(null)} className="ml-auto text-blue-200 hover:text-white transition"><X size={18} /></button>
             </div>
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between shrink-0">
-        <div>
-          <div className="p-6"><h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX</h1></div>
-          <nav className="mt-4 px-2 space-y-1">
-            <p className="px-4 text-[10px] font-bold text-gray-500 uppercase mb-2 tracking-widest">Main Menu</p>
-            <button onClick={() => setView('overview')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all ${view === 'overview' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800'}`}><LayoutDashboard size={18} /> Accounts</button>
-            <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all ${view === 'history' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800'}`}><History size={18} /> History</button>
-            <p className="px-4 pt-6 text-[10px] font-bold text-gray-500 uppercase mb-2 tracking-widest">AI Intelligence</p>
-            <button onClick={handleBulkSync} disabled={isSyncing} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-400 hover:bg-blue-900/20 rounded-lg transition-all ${isSyncing ? 'animate-pulse cursor-not-allowed opacity-50' : ''}`}>{isSyncing ? <RefreshCw size={18} className="animate-spin" /> : <Database size={18} />} {isSyncing ? 'Syncing...' : 'Sync AI Data'}</button>
-            <button onClick={() => fetchAiPrediction(selectedSymbol)} disabled={isPredicting} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-yellow-500 hover:bg-yellow-900/10 rounded-lg transition-all">{isPredicting ? <RefreshCw size={18} className="animate-spin" /> : <Brain size={18} />} Refresh Prediction</button>
-            <div className="pt-4 space-y-1">
-                <button onClick={() => setIsDepositOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><Wallet size={18} /> Deposit </button>
-                <button onClick={() => navigate('/terminal')} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><TrendingUp size={18} /> Trading Terminal</button>
-                
-                {/* --- ECONOMIC NEWS ICON (Added under Trading Terminal) --- */}
-                <button 
-                  onClick={() => window.open('/calendar', '_blank')} 
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-yellow-500 hover:bg-yellow-600/10 rounded-lg transition-all group border border-transparent hover:border-yellow-500/20"
-                >
-                  <Newspaper size={18} className="group-hover:scale-110 transition" /> 
-                  Economic News
-                </button>
-            </div>
-          </nav>
+      {/* --- SIDEBAR (Updated with h-full and flex layout for scrolling) --- */}
+      <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full shrink-0">
+        {/* Top Header Section */}
+        <div className="p-6 shrink-0">
+          <h1 className="text-2xl font-bold text-yellow-500 tracking-tighter">AstonX</h1>
         </div>
-        <div className="p-4 border-t border-gray-800"><button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 rounded-lg hover:bg-red-800 hover:text-red-100 transition-all"><LogOut size={18} /> Log Out</button></div>
+        
+        {/* Middle Navigation Section (Scrollable) */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-1">
+          <p className="px-4 text-[10px] font-bold text-gray-500 uppercase mb-2 tracking-widest">Main Menu</p>
+          <button onClick={() => setView('overview')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all ${view === 'overview' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800'}`}><LayoutDashboard size={18} /> Accounts</button>
+          <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all ${view === 'history' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800'}`}><History size={18} /> History</button>
+          <button onClick={() => setView('withdrawals')} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all ${view === 'withdrawals' ? 'bg-gray-800 text-white shadow-lg' : 'text-gray-400 hover:bg-gray-800'}`}><ArrowDownCircle size={18} /> Withdrawals</button>
+
+          <p className="px-4 pt-6 text-[10px] font-bold text-gray-500 uppercase mb-2 tracking-widest">AI Intelligence</p>
+          <button onClick={handleBulkSync} disabled={isSyncing} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-400 hover:bg-blue-900/20 rounded-lg transition-all ${isSyncing ? 'animate-pulse cursor-not-allowed opacity-50' : ''}`}>{isSyncing ? <RefreshCw size={18} className="animate-spin" /> : <Database size={18} />} {isSyncing ? 'Syncing...' : 'Sync AI Data'}</button>
+          <button onClick={() => fetchAiPrediction(selectedSymbol)} disabled={isPredicting} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-yellow-500 hover:bg-yellow-900/10 rounded-lg transition-all">{isPredicting ? <RefreshCw size={18} className="animate-spin" /> : <Brain size={18} />} Refresh Prediction</button>
+          
+          <div className="pt-4 space-y-1">
+              <button onClick={() => setIsDepositOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><Wallet size={18} /> Deposit </button>
+              <button onClick={() => navigate('/terminal')} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition-all"><TrendingUp size={18} /> Trading Terminal</button>
+              <button onClick={() => window.open('/calendar', '_blank')} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-yellow-500 hover:bg-yellow-600/10 rounded-lg transition-all group border border-transparent hover:border-yellow-500/20"><Newspaper size={18} className="group-hover:scale-110 transition" /> Economic News</button>
+          </div>
+        </div>
+
+        {/* Bottom Section (Pinned Logout) */}
+        <div className="p-4 border-t border-gray-800 shrink-0">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 rounded-lg hover:bg-red-800 hover:text-red-100 transition-all"><LogOut size={18} /> Log Out</button>
+        </div>
       </div>
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-y-auto bg-[#0f172a] p-8">
         <header className="flex justify-between items-center mb-8 max-w-5xl mx-auto">
           <div>
-            <h2 className="text-3xl font-bold">{view === 'overview' ? 'Trading Accounts' : 'Transaction History'}</h2>
+            <h2 className="text-3xl font-bold">
+              {view === 'overview' ? 'Trading Accounts' : view === 'history' ? 'Transaction History' : 'Withdrawal Requests'}
+            </h2>
             <p className="text-gray-400 mt-1">Welcome, <span className="text-yellow-500 font-bold">{userData?.full_name || userData?.username}</span></p>
           </div>
           <div className="flex items-center gap-4">
@@ -302,12 +312,14 @@ function Dashboard() {
                     <div className="flex justify-between items-start mb-4 relative z-10">
                       <div><div className="flex items-center gap-3 mb-3"><span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-2 py-1 rounded border border-green-500/30 tracking-tighter">DEMO ACCOUNT</span></div><h1 className="text-6xl font-black text-white tracking-tighter">${balance.toLocaleString()}<span className="text-2xl text-gray-500 font-normal">.00</span></h1></div>
                       <div className="flex flex-col gap-3">
-                        <button onClick={() => navigate('/terminal')} className="bg-yellow-500 hover:bg-yellow-400 text-black px-10 py-3 rounded-xl font-bold text-lg transition transform active:scale-95">Trade</button>
-                        <button onClick={() => setIsDepositOpen(true)} className="bg-gray-700 hover:bg-gray-600 text-white px-10 py-3 rounded-xl font-bold transition border border-gray-600 active:scale-95">Deposit</button>
+                        <button onClick={() => navigate('/terminal')} className="bg-yellow-500 hover:bg-yellow-400 text-black px-20 py-3 rounded-xl font-bold text-lg transition transform active:scale-95 shadow-lg shadow-yellow-500/20">Trade</button>
+                        <div className="flex gap-2">
+                          <button onClick={() => setIsDepositOpen(true)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-bold transition border border-gray-600 active:scale-95">Deposit</button>
+                          <button onClick={() => setIsWithdrawOpen(true)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-xl font-bold transition border border-gray-700 active:scale-95 flex items-center justify-center gap-2"> Withdraw</button>
+                        </div>
                       </div>
                     </div>
                     
-                    {/* FIXED: Added min-height container to prevent width(-1) error */}
                     <div className="flex-1 w-full min-h-[250px] mt-6 relative z-10">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={chartData}>
@@ -375,7 +387,7 @@ function Dashboard() {
                 <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700"><p className="text-gray-500 text-xs font-bold uppercase mb-2 tracking-widest">Security</p><p className="text-3xl font-black text-blue-400">Encrypted</p></div>
             </div>
           </div>
-        ) : (
+        ) : view === 'history' ? (
           <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
             <div className="bg-gray-800 rounded-3xl border border-gray-700 overflow-hidden shadow-2xl">
                 <table className="w-full text-left">
@@ -399,13 +411,44 @@ function Dashboard() {
                 </table>
             </div>
           </div>
+        ) : (
+          <div className="max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-gray-800 rounded-3xl border border-gray-700 overflow-hidden shadow-2xl">
+                <table className="w-full text-left">
+                    <thead className="bg-gray-900 text-gray-500 text-[10px] uppercase tracking-[0.2em] font-black">
+                        <tr><th className="px-6 py-5">Date</th><th className="px-6 py-5">Amount</th><th className="px-6 py-5">Method</th><th className="px-6 py-5">Details</th><th className="px-6 py-5">Status</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700 text-sm font-mono text-gray-300">
+                        {withdrawalHistory.length === 0 ? (<tr><td colSpan="5" className="py-24 text-center">No withdrawal requests found.</td></tr>) : (
+                            withdrawalHistory.map((w) => (
+                                <tr key={w.id} className="hover:bg-gray-700/40 transition group">
+                                    <td className="px-6 py-5 text-gray-400">{w.date}</td>
+                                    <td className="px-6 py-5 font-bold text-white">${w.amount.toFixed(2)}</td>
+                                    <td className="px-6 py-5 uppercase text-xs">{w.method}</td>
+                                    <td className="px-6 py-5 text-xs truncate max-w-[200px]" title={w.address}>{w.address}</td>
+                                    <td className="px-6 py-5">
+                                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${
+                                        w.status === 'APPROVED' ? 'bg-green-500/20 text-green-400' : 
+                                        w.status === 'REJECTED' ? 'bg-red-500/20 text-red-400' : 
+                                        'bg-yellow-500/20 text-yellow-400'
+                                      }`}>
+                                        {w.status}
+                                      </span>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* --- SETTINGS MODAL --- */}
+      {/* --- ALL MODALS (UNCHANGED) --- */}
       {isSettingsOpen && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
-            <div className="bg-gray-800 w-full max-md:max-w-xs max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in zoom-in duration-200">
                 <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700"><div className="flex items-center gap-2 text-yellow-500"><Settings size={20} /><h3 className="text-lg font-bold text-white tracking-tight">Bot Risk Settings</h3></div><button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button></div>
                 <form onSubmit={handleSaveSettings} className="p-8 space-y-6">
                     <div className="space-y-4">
@@ -419,10 +462,9 @@ function Dashboard() {
         </div>
       )}
 
-      {/* --- DEPOSIT MODAL --- */}
       {isDepositOpen && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
-            <div className="bg-gray-800 w-full max-md:max-w-xs max-w-md rounded-3xl border border-gray-700 overflow-hidden">
+            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden">
                 <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700"><h3 className="text-lg font-bold text-white tracking-tight italic">Fund Account</h3><button onClick={() => setIsDepositOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button></div>
                 <form onSubmit={handleDeposit} className="p-8 space-y-8">
                     <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-3 tracking-[0.2em]">Amount (USD)</label>
@@ -434,7 +476,37 @@ function Dashboard() {
         </div>
       )}
 
-      {/* --- DELETE PHOTO MODAL --- */}
+      {isWithdrawOpen && (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
+            <div className="bg-gray-800 w-full max-w-md rounded-3xl border border-gray-700 overflow-hidden animate-in fade-in duration-300">
+                <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700">
+                  <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2 italic"><CreditCard size={20} /> Request Withdrawal</h3>
+                  <button onClick={() => setIsWithdrawOpen(false)} className="text-gray-500 hover:text-white transition"><X size={24} /></button>
+                </div>
+                <form onSubmit={handleWithdraw} className="p-8 space-y-6">
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Amount (USD)</label>
+                      <input type="number" className="w-full bg-gray-900 border border-gray-600 rounded-xl py-4 px-4 text-white font-bold outline-none focus:border-yellow-500 transition" placeholder="Enter amount to withdraw" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} required />
+                      <p className="text-[10px] text-gray-500 mt-2 italic text-right">Available: ${balance.toFixed(2)}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button type="button" onClick={() => setWithdrawMethod('CRYPTO')} className={`py-3 rounded-xl font-bold text-xs transition border ${withdrawMethod === 'CRYPTO' ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-gray-900 text-gray-400 border-gray-700'}`}>Crypto (USDT)</button>
+                      <button type="button" onClick={() => setWithdrawMethod('BANK')} className={`py-3 rounded-xl font-bold text-xs transition border ${withdrawMethod === 'BANK' ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-gray-900 text-gray-400 border-gray-700'}`}>Bank Transfer</button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">{withdrawMethod === 'CRYPTO' ? 'USDT (TRC20/ERC20) Address' : 'Bank Name & Account Details'}</label>
+                      <textarea rows="3" className="w-full bg-gray-900 border border-gray-600 rounded-xl py-4 px-4 text-white text-sm outline-none focus:border-yellow-500 transition" placeholder={withdrawMethod === 'CRYPTO' ? "Enter your wallet address" : "Bank Name, Acc Number, SWIFT Code"} value={withdrawDetails} onChange={(e) => setWithdrawDetails(e.target.value)} required />
+                    </div>
+
+                    <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-4 rounded-2xl uppercase tracking-widest text-sm transition shadow-lg shadow-yellow-500/20 transform active:scale-95">Send Request</button>
+                    <p className="text-[9px] text-gray-500 text-center uppercase tracking-widest">Requests take 2-4 hours for verification</p>
+                </form>
+            </div>
+        </div>
+      )}
+
       {isDeleteConfirmOpen && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[150] p-4">
             <div className="bg-gray-800 w-full max-w-sm rounded-3xl border border-gray-700 p-8 text-center">

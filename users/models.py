@@ -46,7 +46,7 @@ class Wallet(models.Model):
     def __str__(self):
         return f"{self.user.email}'s Wallet"
 
-# --- 3. PUTHU MODEL: Balance History (Dashboard Graph-kkaaga) ---
+# --- 3. Balance History (Dashboard Graph-kkaaga) ---
 class BalanceHistory(models.Model):
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="history")
     balance = models.DecimalField(max_digits=12, decimal_places=2)
@@ -55,19 +55,72 @@ class BalanceHistory(models.Model):
     def __str__(self):
         return f"{self.wallet.user.username} - {self.balance} at {self.timestamp}"
 
-# 4. Signals (Automating Wallet & Initial History Point)
+# --- 4. WITHDRAWAL SYSTEM (Updated with Balance Deduction Logic) ---
+class Withdrawal(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    )
+    
+    METHOD_CHOICES = (
+        ('CRYPTO', 'Crypto Wallet (USDT)'),
+        ('BANK', 'Bank Transfer'),
+    )
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='withdrawals')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES, default='CRYPTO')
+    address_details = models.TextField(help_text="Bank details or Crypto Address")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # --- INTHA PUTHU LOGIC THAAN BALANCE-AI KURAICKUM ---
+    def save(self, *args, **kwargs):
+        # 1. Check if this is an update (pk exists)
+        if self.pk:
+            # Database-la ippo enna status irukku nu current status-ai edukkurom
+            old_instance = Withdrawal.objects.get(pk=self.pk)
+            
+            # Print logs for debugging in your terminal
+            print(f"DEBUG: Withdrawal Update -> User: {self.user.email}, Old Status: {old_instance.status}, New Status: {self.status}")
+
+            # 2. 'PENDING' la irundhu 'APPROVED' ku maathum podhu mattum logic run pannanum
+            if old_instance.status == 'PENDING' and self.status == 'APPROVED':
+                wallet = self.user.wallet
+                if wallet.balance >= self.amount:
+                    print(f"DEBUG: Deducting ${self.amount} from Wallet...")
+                    wallet.balance -= self.amount
+                    wallet.save()
+                    
+                    # 3. Create BalanceHistory entry to update the dashboard graph
+                    BalanceHistory.objects.create(wallet=wallet, balance=wallet.balance)
+                else:
+                    # Balance illai na request-ai auto-reject panniduvom
+                    print("DEBUG: Insufficient balance to approve withdrawal.")
+                    self.status = 'REJECTED'
+        
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.user.email} - ${self.amount} ({self.status})"
+
+# 5. Signals (Automating Wallet & Initial History Point)
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def create_user_wallet(sender, instance, created, **kwargs):
     if created:
         # User create aagumpothu Wallet create panrom
-        wallet = Wallet.objects.create(user=instance)
+        wallet, _ = Wallet.objects.get_or_create(user=instance)
         # Graph-kkaaga aaramba point-ai (Initial balance) save panrom
         BalanceHistory.objects.create(wallet=wallet, balance=wallet.balance)
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
 def save_user_wallet(sender, instance, **kwargs):
     try:
-        instance.wallet.save()
+        if hasattr(instance, 'wallet'):
+            instance.wallet.save()
     except Wallet.DoesNotExist:
         pass
