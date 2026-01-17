@@ -169,7 +169,7 @@ def request_withdrawal(request):
         )
 
         return Response({
-            "message": "Withdrawal request success! Waiting for Admin Approval.",
+            "message": "Withdrawal request success! Waiting 5-30 min for Approval.",
             "withdrawal_id": withdrawal.id,
             "current_status": withdrawal.status
         }, status=status.HTTP_201_CREATED)

@@ -497,11 +497,11 @@ function Dashboard() {
 
                     <div>
                       <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">{withdrawMethod === 'CRYPTO' ? 'USDT (TRC20/ERC20) Address' : 'Bank Name & Account Details'}</label>
-                      <textarea rows="3" className="w-full bg-gray-900 border border-gray-600 rounded-xl py-4 px-4 text-white text-sm outline-none focus:border-yellow-500 transition" placeholder={withdrawMethod === 'CRYPTO' ? "Enter your wallet address" : "Bank Name, Acc Number, SWIFT Code"} value={withdrawDetails} onChange={(e) => setWithdrawDetails(e.target.value)} required />
+                      <textarea rows="3" className="w-full bg-gray-900 border border-gray-600 rounded-xl py-4 px-4 text-white text-sm outline-none focus:border-yellow-500 transition" placeholder={withdrawMethod === 'CRYPTO' ? "Enter your wallet address" : "Bank Name, Acc Number"} value={withdrawDetails} onChange={(e) => setWithdrawDetails(e.target.value)} required />
                     </div>
 
                     <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-4 rounded-2xl uppercase tracking-widest text-sm transition shadow-lg shadow-yellow-500/20 transform active:scale-95">Send Request</button>
-                    <p className="text-[9px] text-gray-500 text-center uppercase tracking-widest">Requests take 2-4 hours for verification</p>
+                    <p className="text-[9px] text-gray-500 text-center uppercase tracking-widest">Requests take 5-30 min for verification</p>
                 </form>
             </div>
         </div>
